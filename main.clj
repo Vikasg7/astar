@@ -84,15 +84,43 @@
                                           (dedupe-by :c))]
                         (recur grid rows cols src dest nopen nclsd))))))
 
+(defn astar-traces
+  ([grid src dest]
+    (let [rows (dec (count grid))
+          cols (dec (count (first grid)))
+          open [{:c src, :f 0, :g 0, :h 0, :p nil}]
+          clsd {}]
+    (astar-traces grid rows cols src dest open clsd)))
+  ([grid rows cols src dest open clsd]
+      (let [[curr & res] (sort-by :f open)
+            {:keys [c p]}  curr
+            nclsd    (assoc clsd c p)
+            closed?  (partial closed? clsd)
+            blocked? (partial blocked? grid)
+            costs    (partial costs src dest)]
+      (cond (nil? curr) nil
+            (= dest c)  (list (trace-path c nclsd))
+            (closed? c) (lazy-seq (cons (trace-path c clsd)
+                                        (astar-traces grid rows cols src dest res clsd)))
+            :else       (let [neigh  identity
+                              neighs (->> (neibhors rows cols c)
+                                          (filter-out (some-fn closed? blocked?))
+                                          (map (juxt neigh costs))
+                                          (map (partial neibhor-nodes c)))
+                              nopen  (->> (concat res neighs)
+                                          (sort-by (juxt :c :g))
+                                          (dedupe-by :c))]
+                        (lazy-seq (cons (trace-path c nclsd)
+                                        (astar-traces grid rows cols src dest nopen nclsd))))))))
+
 (defn print-grid [grid]
   (doseq [row grid]
-    (println (str "|" (S/join "|" row) "|"))))
+    (println (str "|" (S/join "|" row) "|")))
+  (println))
 
 (defn draw-grid
-  ([grid path]
-    (let [src  (first path)
-          dest (last path)
-          mapr (fn [r row] (map-indexed (partial draw-grid grid path src dest r) row))]
+  ([grid src dest path]
+    (let [mapr (fn [r row] (map-indexed (partial draw-grid grid path src dest r) row))]
     (map-indexed mapr grid)))
   ([grid path src dest r c v]
     (cond (= [r c] src)         "S"
@@ -109,4 +137,9 @@
            [0 1 0 1 0]
            [0 1 0 0 0]])
 
-(visualize grid (astar grid [4 0] [0 4]))
+(def src  [4 0])
+(def dest [0 4])
+
+(visualize grid src dest (astar grid [4 0] [0 4]))
+
+(dorun (map (partial visualize grid src dest) (astar-traces grid [4 0] [0 4])))
