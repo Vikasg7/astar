@@ -3,6 +3,8 @@
     [clojure.string :as S :refer [join]]
     [clojure.pprint :as PP :refer [pprint]]))
 
+(set! *warn-on-reflection* true)
+
 (defn debug [& x]
   (println x)
   x)
@@ -68,14 +70,15 @@
       (let [[curr & res] (sort-by :f open)
             {:keys [c p]}  curr
             nclsd    (assoc clsd c p)
-            closed?  (partial closed? clsd)
-            blocked? (partial blocked? grid)
-            costs    (partial costs src dest)]
+            closed?  (partial closed? clsd)]
       (cond (nil? curr) nil
             (= dest c)  (trace-path c nclsd)
             (closed? c) (recur grid rows cols src dest res clsd)
-            :else       (let [neigh  identity
-                              neighs (->> (neibhors rows cols c)
+            :else       (let [neigh    identity
+                              blocked? (partial blocked? grid)
+                              costs    (partial costs src dest)
+                              neibhors (partial neibhors rows cols)
+                              neighs (->> (neibhors c)
                                           (filter-out (some-fn closed? blocked?))
                                           (map (juxt neigh costs))
                                           (map (partial neibhor-nodes c)))
@@ -95,15 +98,16 @@
       (let [[curr & res] (sort-by :f open)
             {:keys [c p]}  curr
             nclsd    (assoc clsd c p)
-            closed?  (partial closed? clsd)
-            blocked? (partial blocked? grid)
-            costs    (partial costs src dest)]
+            closed?  (partial closed? clsd)]
       (cond (nil? curr) nil
             (= dest c)  (list (trace-path c nclsd))
             (closed? c) (lazy-seq (cons (trace-path c clsd)
                                         (astar-traces grid rows cols src dest res clsd)))
-            :else       (let [neigh  identity
-                              neighs (->> (neibhors rows cols c)
+            :else       (let [neigh    identity
+                              blocked? (partial blocked? grid)
+                              costs    (partial costs src dest)
+                              neibhors (partial neibhors rows cols)
+                              neighs (->> (neibhors c)
                                           (filter-out (some-fn closed? blocked?))
                                           (map (juxt neigh costs))
                                           (map (partial neibhor-nodes c)))
@@ -120,14 +124,15 @@
 
 (defn draw-grid
   ([grid src dest path]
-    (let [mapr (fn [r row] (map-indexed (partial draw-grid grid path src dest r) row))]
-    (map-indexed mapr grid)))
+    (let [draw-row (fn [r row] (map-indexed (partial draw-grid grid path src dest r) row))]
+    (map-indexed draw-row grid)))
   ([grid path src dest r c v]
-    (cond (= [r c] src)         "S"
-          (= [r c] dest)        "E"
-          (index-of [r c] path) "*"
-          (= v 1)               "#"
-          :else                 " ")))
+    (let [step? (fn [s] (index-of s path))]
+    (cond (= [r c] src)  "S"
+          (= [r c] dest) "E"
+          (step? [r c])  "*"
+          (= v 1)        "#"
+          :else          " "))))
 
 (def visualize (comp print-grid draw-grid))
 
@@ -137,9 +142,11 @@
            [0 1 0 1 0]
            [0 1 0 0 0]])
 
-(def src  [4 0])
-(def dest [0 4])
+(defn main [src dest]
+   (println "astar-path")
+   (visualize grid src dest (astar grid [4 0] [0 4]))
+   (println "astar-traces")
+   (dorun (map (partial visualize grid src dest)
+               (astar-traces grid [4 0] [0 4]))))
 
-(visualize grid src dest (astar grid [4 0] [0 4]))
-
-(dorun (map (partial visualize grid src dest) (astar-traces grid [4 0] [0 4])))
+(main [4 0] [0 4])
